@@ -1,16 +1,15 @@
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
-using Infrastructure.Data;
 using Core.Entities;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Core.Interfaces;
 using Core.Specifications;
 using Api.Dtos;
 using AutoMapper;
 using Api.Errors;
 using Microsoft.AspNetCore.Http;
+using Api.Helpers;
+using Microsoft.Extensions.Logging;
 
 namespace Api.Controllers
 {
@@ -23,26 +22,38 @@ namespace Api.Controllers
         private readonly IGenericRepository<ProductBrand> _productBrandsRepo;
         private readonly IGenericRepository<ProductType> _productTypesRepo;
         private readonly IMapper _mapper;
+        private readonly ILogger<ProductsController> _logger;
 
         public ProductsController(IGenericRepository<Product> productsRepo, 
             IGenericRepository<ProductBrand> productBrandsRepo,
             IGenericRepository<ProductType> productTypesRepo,
-            IMapper mapper)
+            IMapper mapper,
+            ILogger<ProductsController> logger)
         {
             _productsRepo = productsRepo;
             _productBrandsRepo = productBrandsRepo;
             _productTypesRepo = productTypesRepo;
             _mapper = mapper;
+            _logger = logger;
         }
 
         [HttpGet]
-        public async Task<ActionResult<IReadOnlyList<ProductDto>>> GetProducts()
+        public async Task<ActionResult<Pagination<ProductDto>>> GetProducts([FromQuery] ProductSpecParams parms)
         {
-            var spec = new ProductsWithTypesAndBrandsSpecification();
+            var spec = new ProductsWithTypesAndBrandsSpecification(parms);
+            var countSpec = new ProductWithFiltersForCountSpecification(parms);
+            
+            var totalItems = await _productsRepo.CountAsync(countSpec);
+            
             var products = await _productsRepo.ListAsync(spec);
+            
 
+            var data =  _mapper.Map<IReadOnlyList<Product>, IReadOnlyList<ProductDto>>(products);
 
-            return Ok(_mapper.Map<IReadOnlyList<Product>, IReadOnlyList<ProductDto>>(products));
+            
+
+            return Ok(new Pagination<ProductDto>(parms.PageIndex,
+                parms.PageSize, totalItems, data));
         }
 
         [HttpGet("brands")]
